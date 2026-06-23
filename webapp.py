@@ -1,598 +1,696 @@
 import os
 import json
 import random
-from datetime import datetime
-from flask import Flask, render_template_string, request, jsonify
 import requests
+from datetime import datetime
+from flask import Flask, request
 
 app = Flask(__name__)
 TOKEN = os.environ.get('BOT_TOKEN')
+ADMIN_ID = "4032"  # Diplomasia profilin (senin ID)
+DP_LINK = "https://diplomacia.com.tr/profile/player/4032"
+JETON_FIYAT = 1000  # 1 jeton = 1000 DP
 
-# Mini App HTML
-HTML = '''
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gazino Kadim</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: #fff;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        
-        .container {
-            max-width: 480px;
-            margin: 0 auto;
-            padding: 16px;
-        }
-        
-        .header {
-            text-align: center;
-            padding: 20px 0;
-            background: linear-gradient(180deg, rgba(255,215,0,0.1) 0%, transparent 100%);
-            border-radius: 20px;
-            margin-bottom: 16px;
-        }
-        
-        .header h1 {
-            font-size: 28px;
-            background: linear-gradient(135deg, #FFD700, #FFA500);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 30px rgba(255,215,0,0.3);
-            margin-bottom: 8px;
-        }
-        
-        .header .subtitle {
-            font-size: 14px;
-            opacity: 0.8;
-        }
-        
-        .balance-card {
-            background: linear-gradient(135deg, #2d3436 0%, #000000 100%);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(255,215,0,0.3);
-            text-align: center;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-        }
-        
-        .balance-amount {
-            font-size: 36px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #FFD700, #FFA500);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        .balance-label {
-            font-size: 14px;
-            opacity: 0.7;
-            margin-bottom: 4px;
-        }
-        
-        .stats-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        
-        .stat-card {
-            flex: 1;
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
-            padding: 12px;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .stat-value {
-            font-size: 18px;
-            font-weight: bold;
-            color: #FFD700;
-        }
-        
-        .stat-label {
-            font-size: 11px;
-            opacity: 0.7;
-            margin-top: 4px;
-        }
-        
-        .games-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-        
-        .game-card {
-            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
-            border-radius: 16px;
-            padding: 20px 12px;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .game-card:active {
-            transform: scale(0.95);
-            border-color: #FFD700;
-        }
-        
-        .game-card:hover {
-            border-color: rgba(255,215,0,0.5);
-            box-shadow: 0 5px 20px rgba(255,215,0,0.2);
-        }
-        
-        .game-icon {
-            font-size: 40px;
-            margin-bottom: 8px;
-        }
-        
-        .game-name {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 4px;
-        }
-        
-        .game-badge {
-            display: inline-block;
-            background: #FFD700;
-            color: #000;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 10px;
-            font-weight: bold;
-        }
-        
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .modal.active {
-            display: flex;
-        }
-        
-        .modal-content {
-            background: #1a1a2e;
-            border-radius: 20px;
-            padding: 24px;
-            width: 90%;
-            max-width: 400px;
-            border: 1px solid rgba(255,215,0,0.3);
-            text-align: center;
-        }
-        
-        .slot-reels {
-            display: flex;
-            justify-content: center;
-            gap: 12px;
-            margin: 20px 0;
-        }
-        
-        .slot-reel {
-            width: 80px;
-            height: 80px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            border: 2px solid rgba(255,215,0,0.3);
-        }
-        
-        .btn {
-            background: linear-gradient(135deg, #FFD700, #FFA500);
-            color: #000;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 12px;
-            transition: all 0.3s;
-        }
-        
-        .btn:active {
-            transform: scale(0.95);
-        }
-        
-        .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-        }
-        
-        .bet-input {
-            width: 100%;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(255,215,0,0.3);
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            font-size: 16px;
-            text-align: center;
-            margin: 8px 0;
-        }
-        
-        .result-text {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 12px 0;
-        }
-        
-        .win { color: #4CAF50; }
-        .lose { color: #f44336; }
-        
-        .language-selector {
-            display: flex;
-            gap: 4px;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin-top: 8px;
-        }
-        
-        .lang-btn {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #fff;
-            padding: 6px 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        
-        .lang-btn.active {
-            background: #FFD700;
-            color: #000;
-            border-color: #FFD700;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotateX(0deg); }
-            100% { transform: rotateX(360deg); }
-        }
-        
-        .spinning {
-            animation: spin 0.5s ease-in-out;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎰 GAZİNO KADİM</h1>
-            <div class="subtitle" id="welcomeText">Hoş Geldin!</div>
-        </div>
-        
-        <div class="balance-card">
-            <div class="balance-label" id="balanceLabel">Bakiye</div>
-            <div class="balance-amount" id="balance">1000 🪙</div>
-        </div>
-        
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-value" id="level">⭐ 1</div>
-                <div class="stat-label" id="levelLabel">Seviye</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="gamesPlayed">0</div>
-                <div class="stat-label" id="gamesLabel">Oyun</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="totalWin" style="color:#4CAF50">+0</div>
-                <div class="stat-label" id="winLabel">Kazanç</div>
-            </div>
-        </div>
-        
-        <div class="games-grid">
-            <div class="game-card" onclick="openGame('slot')">
-                <div class="game-icon">🎰</div>
-                <div class="game-name" id="slotName">Slot</div>
-                <div class="game-badge">x50</div>
-            </div>
-            <div class="game-card" onclick="openGame('dice')">
-                <div class="game-icon">🎲</div>
-                <div class="game-name" id="diceName">Zar</div>
-                <div class="game-badge">x8</div>
-            </div>
-            <div class="game-card" onclick="openGame('roulette')">
-                <div class="game-icon">🎡</div>
-                <div class="game-name" id="rouletteName">Rulet</div>
-                <div class="game-badge">x36</div>
-            </div>
-            <div class="game-card" onclick="openGame('blackjack')">
-                <div class="game-icon">🃏</div>
-                <div class="game-name" id="bjName">Blackjack</div>
-                <div class="game-badge">x2.5</div>
-            </div>
-        </div>
-        
-        <div class="language-selector" id="langSelector">
-            <button class="lang-btn active" onclick="setLang('tr')">🇹🇷 TR</button>
-            <button class="lang-btn" onclick="setLang('en')">🇬🇧 EN</button>
-            <button class="lang-btn" onclick="setLang('ru')">🇷🇺 RU</button>
-            <button class="lang-btn" onclick="setLang('ar')">🇸🇦 AR</button>
-            <button class="lang-btn" onclick="setLang('de')">🇩🇪 DE</button>
-            <button class="lang-btn" onclick="setLang('es')">🇪🇸 ES</button>
-            <button class="lang-btn" onclick="setLang('fr')">🇫🇷 FR</button>
-            <button class="lang-btn" onclick="setLang('ja')">🇯🇵 JA</button>
-        </div>
-        
-        <button class="btn btn-secondary" onclick="claimDaily()" id="dailyBtn">🎁 Günlük Bonus</button>
-    </div>
-    
-    <!-- Oyun Modal -->
-    <div class="modal" id="gameModal">
-        <div class="modal-content">
-            <h2 id="gameTitle">🎰 Slot</h2>
-            <div class="slot-reels" id="slotReels">
-                <div class="slot-reel">🍒</div>
-                <div class="slot-reel">🍋</div>
-                <div class="slot-reel">🍊</div>
-            </div>
-            <div class="result-text" id="resultText"></div>
-            <input type="number" class="bet-input" id="betInput" value="50" min="10" max="5000" placeholder="Bahis">
-            <button class="btn" id="playBtn" onclick="playGame()">🎯 OYNA</button>
-            <button class="btn btn-secondary" onclick="closeGame()">Kapat</button>
-        </div>
-    </div>
-    
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
-        
-        let currentGame = 'slot';
-        let userData = {
-            balance: 1000,
-            level: 1,
-            games: 0,
-            wins: 0,
-            lang: 'tr'
-        };
-        
-        const translations = {
-            tr: {
-                welcome: 'Hoş Geldin!', balance: 'Bakiye', level: 'Seviye',
-                games: 'Oyun', winLabel: 'Kazanç', slot: 'Slot', dice: 'Zar',
-                roulette: 'Rulet', blackjack: 'Blackjack', daily: '🎁 Günlük Bonus',
-                play: '🎯 OYNA', close: 'Kapat', bet: 'Bahis'
-            },
-            en: {
-                welcome: 'Welcome!', balance: 'Balance', level: 'Level',
-                games: 'Games', winLabel: 'Winnings', slot: 'Slot', dice: 'Dice',
-                roulette: 'Roulette', blackjack: 'Blackjack', daily: '🎁 Daily Bonus',
-                play: '🎯 PLAY', close: 'Close', bet: 'Bet'
-            },
-            ru: {
-                welcome: 'Добро пожаловать!', balance: 'Баланс', level: 'Уровень',
-                games: 'Игры', winLabel: 'Выигрыш', slot: 'Слот', dice: 'Кости',
-                roulette: 'Рулетка', blackjack: 'Блэкджек', daily: '🎁 Бонус',
-                play: '🎯 ИГРАТЬ', close: 'Закрыть', bet: 'Ставка'
-            },
-            ar: {
-                welcome: 'أهلاً!', balance: 'الرصيد', level: 'المستوى',
-                games: 'الألعاب', winLabel: 'الأرباح', slot: 'سلوت', dice: 'نرد',
-                roulette: 'روليت', blackjack: 'بلاك جاك', daily: '🎁 مكافأة',
-                play: '🎯 العب', close: 'إغلاق', bet: 'الرهان'
-            },
-            de: {
-                welcome: 'Willkommen!', balance: 'Guthaben', level: 'Level',
-                games: 'Spiele', winLabel: 'Gewinn', slot: 'Slot', dice: 'Würfel',
-                roulette: 'Roulette', blackjack: 'Blackjack', daily: '🎁 Bonus',
-                play: '🎯 SPIELEN', close: 'Schließen', bet: 'Einsatz'
-            },
-            es: {
-                welcome: '¡Bienvenido!', balance: 'Saldo', level: 'Nivel',
-                games: 'Juegos', winLabel: 'Ganancias', slot: 'Slot', dice: 'Dados',
-                roulette: 'Ruleta', blackjack: 'Blackjack', daily: '🎁 Bono',
-                play: '🎯 JUGAR', close: 'Cerrar', bet: 'Apuesta'
-            },
-            fr: {
-                welcome: 'Bienvenue!', balance: 'Solde', level: 'Niveau',
-                games: 'Jeux', winLabel: 'Gains', slot: 'Slot', dice: 'Dés',
-                roulette: 'Roulette', blackjack: 'Blackjack', daily: '🎁 Bonus',
-                play: '🎯 JOUER', close: 'Fermer', bet: 'Mise'
-            },
-            ja: {
-                welcome: 'ようこそ!', balance: '残高', level: 'レベル',
-                games: 'ゲーム', winLabel: '勝利', slot: 'スロット', dice: 'サイコロ',
-                roulette: 'ルーレット', blackjack: 'ブラックジャック', daily: '🎁 ボーナス',
-                play: '🎯 プレイ', close: '閉じる', bet: 'ベット'
-            }
-        };
-        
-        function setLang(lang) {
-            userData.lang = lang;
-            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector(`[onclick="setLang('${lang}')"]`).classList.add('active');
-            updateUI();
-        }
-        
-        function updateUI() {
-            const l = translations[userData.lang];
-            document.getElementById('welcomeText').textContent = l.welcome;
-            document.getElementById('balanceLabel').textContent = l.balance;
-            document.getElementById('levelLabel').textContent = l.level;
-            document.getElementById('gamesLabel').textContent = l.games;
-            document.getElementById('winLabel').textContent = l.winLabel;
-            document.getElementById('slotName').textContent = l.slot;
-            document.getElementById('diceName').textContent = l.dice;
-            document.getElementById('rouletteName').textContent = l.roulette;
-            document.getElementById('bjName').textContent = l.blackjack;
-            document.getElementById('dailyBtn').textContent = l.daily;
-            document.getElementById('playBtn').textContent = l.play;
-            document.getElementById('balance').textContent = userData.balance + ' 🪙';
-            document.getElementById('level').textContent = '⭐ ' + userData.level;
-            document.getElementById('gamesPlayed').textContent = userData.games;
-            document.getElementById('totalWin').textContent = '+' + userData.wins;
-        }
-        
-        function openGame(game) {
-            currentGame = game;
-            const l = translations[userData.lang];
-            document.getElementById('gameTitle').textContent = 
-                game === 'slot' ? '🎰 ' + l.slot :
-                game === 'dice' ? '🎲 ' + l.dice :
-                game === 'roulette' ? '🎡 ' + l.roulette :
-                '🃏 ' + l.blackjack;
-            document.getElementById('gameModal').classList.add('active');
-            document.getElementById('resultText').textContent = '';
-            document.getElementById('slotReels').style.display = 
-                (game === 'slot' || game === 'dice') ? 'flex' : 'none';
-        }
-        
-        function closeGame() {
-            document.getElementById('gameModal').classList.remove('active');
-        }
-        
-        function playGame() {
-            const bet = parseInt(document.getElementById('betInput').value) || 50;
-            
-            if (bet > userData.balance) {
-                document.getElementById('resultText').innerHTML = 
-                    '<span class="lose">❌ Yetersiz bakiye!</span>';
-                return;
-            }
-            
-            let win = 0;
-            let result = '';
-            
-            if (currentGame === 'slot') {
-                const emojis = ["🍒","🍋","🍊","🍇","💎","7️⃣","⭐","🔔","👑","💰"];
-                const s1 = emojis[Math.floor(Math.random()*10)];
-                const s2 = emojis[Math.floor(Math.random()*10)];
-                const s3 = emojis[Math.floor(Math.random()*10)];
-                
-                document.querySelectorAll('.slot-reel')[0].textContent = s1;
-                document.querySelectorAll('.slot-reel')[1].textContent = s2;
-                document.querySelectorAll('.slot-reel')[2].textContent = s3;
-                
-                if (s1 === s2 && s2 === s3) {
-                    win = s1 === '👑' ? bet*50 : s1 === '💰' ? bet*25 : bet*10;
-                    result = '🎉 JACKPOT!';
-                } else if (s1 === s2 || s2 === s3 || s1 === s3) {
-                    win = bet * 2;
-                    result = '👏 İkili!';
-                } else {
-                    result = '😔 Kaybettin';
-                }
-            } else if (currentGame === 'dice') {
-                const d1 = Math.floor(Math.random()*6)+1;
-                const d2 = Math.floor(Math.random()*6)+1;
-                const total = d1 + d2;
-                const diceEmoji = ['','⚀','⚁','⚂','⚃','⚄','⚅'];
-                
-                document.querySelectorAll('.slot-reel')[0].textContent = diceEmoji[d1];
-                document.querySelectorAll('.slot-reel')[1].textContent = diceEmoji[d2];
-                document.querySelectorAll('.slot-reel')[2].textContent = '= ' + total;
-                
-                if (total === 7) {
-                    win = bet * 6;
-                    result = '🎯 Muhteşem!';
-                } else if (total >= 5 && total <= 9) {
-                    win = bet * 2;
-                    result = '👌 İyi!';
-                } else {
-                    result = '😔 Bilemedin';
-                }
-            } else if (currentGame === 'roulette') {
-                const num = Math.floor(Math.random()*37);
-                const red = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
-                const color = num === 0 ? '🟢' : red.includes(num) ? '🔴' : '⚫';
-                
-                document.getElementById('slotReels').style.display = 'flex';
-                document.querySelectorAll('.slot-reel')[0].textContent = '🎡';
-                document.querySelectorAll('.slot-reel')[1].textContent = color;
-                document.querySelectorAll('.slot-reel')[2].textContent = num;
-                
-                if (color === '🔴') {
-                    win = bet * 2;
-                    result = '🎉 Kırmızı kazandı!';
-                } else if (num === 0) {
-                    win = bet * 14;
-                    result = '💚 YEŞİL!';
-                } else {
-                    result = '💔 Kaybettin';
-                }
-            } else if (currentGame === 'blackjack') {
-                document.getElementById('slotReels').style.display = 'none';
-                const pCard = Math.floor(Math.random()*11)+2;
-                const dCard = Math.floor(Math.random()*11)+2;
-                
-                if (pCard > dCard) {
-                    win = bet * 2;
-                    result = `🃏 Sen: ${pCard} vs ${dCard} Krupiye | 🎉 Kazandın!`;
-                } else if (pCard === dCard) {
-                    win = bet;
-                    result = `🃏 Sen: ${pCard} vs ${dCard} Krupiye | 🤝 Berabere`;
-                } else {
-                    result = `🃏 Sen: ${pCard} vs ${dCard} Krupiye | 💔 Kaybettin`;
-                }
-            }
-            
-            userData.balance += win - bet;
-            userData.games++;
-            if (win > 0) userData.wins += win;
-            
-            document.getElementById('resultText').innerHTML = 
-                (win > 0 ? '<span class="win">' + result + ' +' + win + ' 🪙</span>' :
-                 '<span class="lose">' + result + ' -' + bet + ' 🪙</span>');
-            
-            updateUI();
-        }
-        
-        function claimDaily() {
-            userData.balance += 250;
-            updateUI();
-            tg.showAlert('🎁 Günlük Bonus: +250 🪙');
-        }
-        
-        // Başlangıç
-        updateUI();
-    </script>
-</body>
-</html>
-'''
+users = {}
+pending_deposits = {}  # Bekleyen ödemeler
+
+def save_data():
+    try:
+        with open('/tmp/users.json', 'w') as f:
+            json.dump({'users': users, 'deposits': pending_deposits}, f)
+    except:
+        pass
+
+def load_data():
+    global users, pending_deposits
+    try:
+        with open('/tmp/users.json', 'r') as f:
+            data = json.load(f)
+            users = data.get('users', {})
+            pending_deposits = data.get('deposits', {})
+    except:
+        pass
+
+load_data()
+
+def send_message(chat_id, text, reply_markup=None, parse='HTML'):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    data = {
+        'chat_id': str(chat_id),
+        'text': text,
+        'parse_mode': parse
+    }
+    if reply_markup:
+        data['reply_markup'] = json.dumps(reply_markup)
+    try:
+        requests.post(url, json=data, timeout=10)
+    except:
+        pass
+
+def send_to_admin(text):
+    """Sana bildirim gönder"""
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    data = {
+        'chat_id': ADMIN_ID,
+        'text': text,
+        'parse_mode': 'HTML'
+    }
+    try:
+        requests.post(url, json=data, timeout=10)
+    except:
+        pass
 
 @app.route('/')
-def index():
-    return render_template_string(HTML)
+def home():
+    return 'Gazino Kadim Çalışıyor!'
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    from bot import webhook_handler
-    return webhook_handler(request.json)
+    try:
+        data = request.json
+        
+        if 'message' in data:
+            msg = data['message']
+            chat_id = msg['chat']['id']
+            text = msg.get('text', '')
+            uid = str(msg['from']['id'])
+            name = msg['from'].get('first_name', 'Oyuncu')
+            username = msg['from'].get('username', '')
+            
+            # Kullanıcı kaydı
+            if uid not in users:
+                users[uid] = {
+                    'name': name,
+                    'username': username,
+                    'balance': 0,  # 0 jetonla başla
+                    'dp_spent': 0,  # Harcadığı DP
+                    'games': 0,
+                    'wins': 0,
+                    'daily': '',
+                    'level': 1
+                }
+                save_data()
+            
+            user = users[uid]
+            
+            def send(text, kb=None):
+                send_message(chat_id, text, kb)
+            
+            # ============ ANA MENÜ ============
+            if text == '/start':
+                kb = {
+                    'inline_keyboard': [
+                        [{'text': '💎 JETON AL (DP ile)', 'callback_data': 'buy_jeton'}],
+                        [{'text': '🎰 Slot Oyna', 'callback_data': 'playslot_50'},
+                         {'text': '🎲 Zar At', 'callback_data': 'playdice_50'}],
+                        [{'text': '🎡 Rulet', 'callback_data': 'playroulette_50'},
+                         {'text': '🃏 Blackjack', 'callback_data': 'playbj_100'}],
+                        [{'text': '💰 Bakiyem', 'callback_data': 'balance'},
+                         {'text': '🎁 Günlük Bonus', 'callback_data': 'daily'}],
+                        [{'text': '🏆 Liderler', 'callback_data': 'top'},
+                         {'text': '📊 İstatistikler', 'callback_data': 'stats'}]
+                    ]
+                }
+                
+                msg_text = (
+                    f"🎰 <b>GAZİNO KADİM</b>\n\n"
+                    f"👑 Hoş Geldin, <b>{name}</b>!\n"
+                    f"💎 Bakiye: <b>{user['balance']}</b> Jeton\n"
+                    f"⭐ Seviye: <b>{user['level']}</b>\n\n"
+                    f"💡 <i>Jeton almak için butona tıkla!</i>\n"
+                    f"💰 1 Jeton = {JETON_FIYAT} DP"
+                )
+                
+                send(msg_text, kb)
+            
+            # ============ JETON AL ============
+            elif text == '/jeton' or text == '/buy':
+                kb = {
+                    'inline_keyboard': [
+                        [{'text': '💎 1 Jeton (1.000 DP)', 'callback_data': 'deposit_1'}],
+                        [{'text': '💎 5 Jeton (5.000 DP)', 'callback_data': 'deposit_5'}],
+                        [{'text': '💎 10 Jeton (10.000 DP)', 'callback_data': 'deposit_10'}],
+                        [{'text': '💎 50 Jeton (50.000 DP)', 'callback_data': 'deposit_50'}],
+                        [{'text': '💎 100 Jeton (100.000 DP)', 'callback_data': 'deposit_100'}],
+                        [{'text': '🔗 DP GÖNDERME LİNKİ', 'url': DP_LINK}]
+                    ]
+                }
+                
+                msg_text = (
+                    f"💎 <b>JETON SATIN AL</b>\n\n"
+                    f"📊 Kur: <b>1 Jeton = {JETON_FIYAT} DP</b>\n\n"
+                    f"📝 <b>Nasıl alınır?</b>\n\n"
+                    f"1️⃣ Aşağıdan paket seç\n"
+                    f"2️⃣ Linke tıkla, DP gönder\n"
+                    f"3️⃣ <b>Diplomasia'da mesaj at</b>: \n"
+                    f"   <i>'Gazino için X DP gönderdim'</i>\n"
+                    f"4️⃣ Admin onaylayınca jetonların yüklenecek!\n\n"
+                    f"🔗 <b>DP Gönderme Linki:</b>\n"
+                    f"<a href='{DP_LINK}'>Diplomasia Profili</a>"
+                )
+                
+                send(msg_text, kb)
+            
+            # ============ OYUN: SLOT ============
+            elif text.startswith('/slot'):
+                parts = text.split()
+                bet = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                
+                if user['balance'] < bet:
+                    send(f"❌ Yetersiz jeton!\n💎 Bakiyen: {user['balance']} Jeton\n\n💡 /jeton yazarak jeton alabilirsin!")
+                    return 'OK'
+                
+                emojis = ['🍒','🍋','🍊','🍇','💎','7️⃣','⭐','🔔','👑','💰']
+                s1, s2, s3 = random.choice(emojis), random.choice(emojis), random.choice(emojis)
+                
+                win = 0
+                result_msg = ''
+                
+                if s1 == s2 == s3:
+                    if s1 == '👑':
+                        win = bet * 50
+                        result_msg = '👑👑👑 KRALİYET JACKPOT!'
+                    elif s1 == '💰':
+                        win = bet * 25
+                        result_msg = '💰💰💰 BÜYÜK İKRAMİYE!'
+                    elif s1 == '💎':
+                        win = bet * 10
+                        result_msg = '💎💎💎 JACKPOT!'
+                    else:
+                        win = bet * 5
+                        result_msg = '✨✨✨ KAZANDIN!'
+                elif s1 == s2 or s2 == s3 or s1 == s3:
+                    win = bet * 2
+                    result_msg = '👏 İKİLİ YAKALADIN!'
+                else:
+                    result_msg = '😔 Kaybettin'
+                
+                user['balance'] += win - bet
+                user['games'] += 1
+                if win > 0:
+                    user['wins'] += win
+                
+                # Seviye atlama
+                user['level'] = (user['wins'] // 100) + 1
+                
+                save_data()
+                
+                msg = (
+                    f"🎰 <b>SLOT MAKİNESİ</b>\n\n"
+                    f"┌─────┬─────┬─────┐\n"
+                    f"│  {s1}  │  {s2}  │  {s3}  │\n"
+                    f"└─────┴─────┴─────┘\n\n"
+                    f"{result_msg}\n\n"
+                    f"💵 Bahis: {bet} Jeton\n"
+                    f"{'💰 Kazanç: +' + str(win) if win > 0 else '💸 Kayıp: -' + str(bet)} Jeton\n"
+                    f"💎 Bakiye: {user['balance']} Jeton"
+                )
+                
+                kb = {
+                    'inline_keyboard': [[
+                        {'text': f'🔄 {bet} Tekrar', 'callback_data': f'playslot_{bet}'},
+                        {'text': f'💰 x2 Bahis', 'callback_data': f'playslot_{bet*2}'}
+                    ]]
+                }
+                
+                send(msg, kb)
+            
+            # ============ OYUN: ZAR ============
+            elif text.startswith('/zar'):
+                parts = text.split()
+                bet = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                
+                if user['balance'] < bet:
+                    send(f"❌ Yetersiz jeton!\n💎 /jeton ile jeton al")
+                    return 'OK'
+                
+                z1 = random.randint(1, 6)
+                z2 = random.randint(1, 6)
+                total = z1 + z2
+                dice_emoji = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
+                
+                win = 0
+                if total == 7:
+                    win = bet * 6
+                    msg = '🎯 MÜKEMMEL!'
+                elif 5 <= total <= 9:
+                    win = bet * 2
+                    msg = '👌 İYİ!'
+                else:
+                    msg = '😔 Kaybettin'
+                
+                user['balance'] += win - bet
+                user['games'] += 1
+                if win > 0:
+                    user['wins'] += win
+                user['level'] = (user['wins'] // 100) + 1
+                save_data()
+                
+                result = (
+                    f"🎲 <b>ZAR ATMA</b>\n\n"
+                    f"┌───────┬───────┐\n"
+                    f"│   {dice_emoji[z1]}   │   {dice_emoji[z2]}   │\n"
+                    f"└───────┴───────┘\n"
+                    f"Toplam: <b>{total}</b>\n\n"
+                    f"{msg}\n"
+                    f"{'💰 +' + str(win) if win > 0 else '💸 -' + str(bet)} Jeton\n"
+                    f"💎 Bakiye: {user['balance']} Jeton"
+                )
+                
+                send(result)
+            
+            # ============ BAKİYE ============
+            elif text == '/balance':
+                msg = (
+                    f"💎 <b>BAKİYE BİLGİSİ</b>\n\n"
+                    f"👑 {user['name']}\n"
+                    f"💎 Jeton: <b>{user['balance']}</b>\n"
+                    f"⭐ Seviye: <b>{user['level']}</b>\n"
+                    f"🎮 Oynanan: {user['games']}\n"
+                    f"🏆 Kazanç: {user['wins']} Jeton\n\n"
+                    f"📊 1 Jeton = {JETON_FIYAT} DP\n"
+                    f"💰 Değer: {user['balance'] * JETON_FIYAT} DP"
+                )
+                send(msg)
+            
+            # ============ GÜNLÜK BONUS ============
+            elif text == '/daily':
+                today = datetime.now().strftime('%Y-%m-%d')
+                if user['daily'] == today:
+                    send('⏰ Bugün bonus aldın! Yarın tekrar gel.')
+                else:
+                    bonus = random.randint(1, 5)
+                    user['balance'] += bonus
+                    user['daily'] = today
+                    save_data()
+                    send(f"🎁 <b>GÜNLÜK BONUS!</b>\n\n💰 +{bonus} Jeton\n💎 Bakiye: {user['balance']} Jeton")
+            
+            # ============ LİDER TABLOSU ============
+            elif text == '/top':
+                sorted_u = sorted(users.items(), key=lambda x: x[1]['balance'], reverse=True)[:10]
+                msg = "🏆 <b>LİDER TABLOSU</b>\n\n"
+                for i, (_, u) in enumerate(sorted_u, 1):
+                    emoji = ['🥇','🥈','🥉'][i-1] if i <= 3 else f'{i}.'
+                    msg += f"{emoji} {u['name']}: {u['balance']} Jeton ⭐{u['level']}\n"
+                send(msg)
+            
+            # ============ İSTATİSTİK ============
+            elif text == '/stats':
+                msg = (
+                    f"📊 <b>İSTATİSTİKLER</b>\n\n"
+                    f"👑 {user['name']}\n"
+                    f"💎 Jeton: {user['balance']}\n"
+                    f"⭐ Seviye: {user['level']}\n"
+                    f"🎮 Oyun: {user['games']}\n"
+                    f"🏆 Kazanç: {user['wins']} Jeton\n"
+                    f"💳 Harcanan DP: {user['dp_spent']}\n\n"
+                    f"📊 1 Jeton = {JETON_FIYAT} DP"
+                )
+                send(msg)
+            
+            # ============ YARDIM ============
+            elif text == '/help':
+                msg = (
+                    f"🎰 <b>GAZİNO KADİM YARDIM</b>\n\n"
+                    f"💎 <b>Jeton Al:</b> /jeton\n"
+                    f"🎰 <b>Slot:</b> /slot [bahis]\n"
+                    f"🎲 <b>Zar:</b> /zar [bahis]\n"
+                    f"💰 <b>Bakiye:</b> /balance\n"
+                    f"🎁 <b>Bonus:</b> /daily\n"
+                    f"🏆 <b>Liderler:</b> /top\n\n"
+                    f"📊 1 Jeton = {JETON_FIYAT} DP\n"
+                    f"🔗 DP Gönder: {DP_LINK}"
+                )
+                send(msg)
+        
+        # ============ BUTON İŞLEMLERİ ============
+        elif 'callback_query' in data:
+            q = data['callback_query']
+            chat_id = q['message']['chat']['id']
+            uid = str(q['from']['id'])
+            cb = q['data']
+            name = q['from'].get('first_name', 'Oyuncu')
+            
+            requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery",
+                         json={'callback_query_id': q['id'], 'text': '✅'})
+            
+            if uid not in users:
+                users[uid] = {'name': name, 'balance': 0, 'dp_spent': 0, 'games': 0, 'wins': 0, 'daily': '', 'level': 1}
+            
+            user = users[uid]
+            
+            def send(text, kb=None):
+                send_message(chat_id, text, kb)
+            
+            # ============ JETON AL MENÜSÜ ============
+            if cb == 'buy_jeton':
+                kb = {
+                    'inline_keyboard': [
+                        [{'text': '💎 1 Jeton (1.000 DP)', 'callback_data': 'deposit_1'}],
+                        [{'text': '💎 5 Jeton (5.000 DP)', 'callback_data': 'deposit_5'}],
+                        [{'text': '💎 10 Jeton (10.000 DP)', 'callback_data': 'deposit_10'}],
+                        [{'text': '💎 50 Jeton (50.000 DP)', 'callback_data': 'deposit_50'}],
+                        [{'text': '💎 100 Jeton (100.000 DP)', 'callback_data': 'deposit_100'}],
+                        [{'text': '🔗 DP GÖNDERME LİNKİ', 'url': DP_LINK}],
+                        [{'text': '🔙 Ana Menü', 'callback_data': 'menu'}]
+                    ]
+                }
+                
+                msg = (
+                    f"💎 <b>JETON SATIN AL</b>\n\n"
+                    f"📊 <b>1 Jeton = {JETON_FIYAT} DP</b>\n\n"
+                    f"📝 <b>3 Adımda Jeton Al:</b>\n\n"
+                    f"1️⃣ Paket seç\n"
+                    f"2️⃣ Linke tıkla, DP gönder\n"
+                    f"3️⃣ Diplomasia'da bana mesaj at:\n"
+                    f"   <i>'Jeton aldım, DP gönderdim'</i>\n\n"
+                    f"🔗 <b>DP Gönder:</b>\n"
+                    f"<a href='{DP_LINK}'>diplomacia.com.tr/profile/player/4032</a>"
+                )
+                
+                send(msg, kb)
+            
+            # ============ DEPOSIT İŞLEMLERİ ============
+            elif cb.startswith('deposit_'):
+                amount = int(cb.split('_')[1])
+                dp_needed = amount * JETON_FIYAT
+                
+                # Bekleyen ödeme kaydı
+                pending_deposits[uid] = {
+                    'name': name,
+                    'amount': amount,
+                    'dp': dp_needed,
+                    'time': datetime.now().strftime('%H:%M')
+                }
+                save_data()
+                
+                kb = {
+                    'inline_keyboard': [
+                        [{'text': f'🔗 {dp_needed} DP GÖNDER', 'url': DP_LINK}],
+                        [{'text': '✅ Gönderdim, Onay Bekliyorum', 'callback_data': 'sent_dp'}]
+                    ]
+                }
+                
+                msg = (
+                    f"💎 <b>{amount} JETON SATIN AL</b>\n\n"
+                    f"💰 Tutar: <b>{dp_needed} DP</b>\n"
+                    f"📊 Kur: 1 Jeton = {JETON_FIYAT} DP\n\n"
+                    f"📝 <b>Hemen Gönder:</b>\n"
+                    f"1️⃣ Linke tıkla\n"
+                    f"2️⃣ {dp_needed} DP gönder\n"
+                    f"3️⃣ Diplomasia'da mesaj at\n\n"
+                    f"⏳ Onaylanınca jetonların yüklenecek!"
+                )
+                
+                send(msg, kb)
+                
+                # SANA BİLDİRİM GÖNDER!
+                admin_msg = (
+                    f"🔔 <b>YENİ JETON TALEBİ!</b>\n\n"
+                    f"👤 Oyuncu: {name}\n"
+                    f"🆔 ID: {uid}\n"
+                    f"💎 Jeton: {amount} Jeton\n"
+                    f"💰 DP: {dp_needed} DP\n"
+                    f"⏰ Saat: {datetime.now().strftime('%H:%M')}\n\n"
+                    f"📝 Diplomasia'dan kontrol et!\n"
+                    f"🔗 <a href='{DP_LINK}'>Profile Git</a>"
+                )
+                send_to_admin(admin_msg)
+            
+            # ============ GÖNDERDİM BUTONU ============
+            elif cb == 'sent_dp':
+                send(
+                    "✅ <b>Bilgi Alındı!</b>\n\n"
+                    "📝 Admin DP gönderimini kontrol edecek.\n"
+                    "⏳ Onaylanınca jetonların hesabına yüklenecek.\n\n"
+                    "🙏 Sabrın için teşekkürler!"
+                )
+                
+                # Sana tekrar bildirim
+                admin_msg = (
+                    f"🔔 <b>OYUNCU DP GÖNDERDİM DEDİ!</b>\n\n"
+                    f"👤 {name} (ID: {uid})\n"
+                    f"⏰ Kontrol et ve onayla!\n\n"
+                    f"✅ Onaylamak için:\n"
+                    f"<code>/onay {uid} [jeton_miktarı]</code>"
+                )
+                send_to_admin(admin_msg)
+            
+            # ============ SLOT BUTONU ============
+            elif cb.startswith('playslot_'):
+                bet = int(cb.split('_')[1])
+                
+                if user['balance'] < bet:
+                    send(f"❌ Yetersiz jeton!\n💎 /jeton ile jeton al")
+                    return 'OK'
+                
+                emojis = ['🍒','🍋','🍊','🍇','💎','7️⃣','⭐','🔔','👑','💰']
+                s1, s2, s3 = random.choice(emojis), random.choice(emojis), random.choice(emojis)
+                
+                win = 0
+                result_msg = ''
+                
+                if s1 == s2 == s3:
+                    if s1 == '👑':
+                        win = bet * 50
+                        result_msg = '👑👑👑 KRALİYET JACKPOT!'
+                    elif s1 == '💰':
+                        win = bet * 25
+                        result_msg = '💰💰💰 BÜYÜK İKRAMİYE!'
+                    else:
+                        win = bet * 10
+                        result_msg = '💎 JACKPOT!'
+                elif s1 == s2 or s2 == s3 or s1 == s3:
+                    win = bet * 2
+                    result_msg = '👏 İKİLİ!'
+                else:
+                    result_msg = '😔 Kaybettin'
+                
+                user['balance'] += win - bet
+                user['games'] += 1
+                if win > 0:
+                    user['wins'] += win
+                user['level'] = (user['wins'] // 100) + 1
+                save_data()
+                
+                msg = (
+                    f"🎰 <b>SLOT</b>\n\n"
+                    f"┌─────┬─────┬─────┐\n"
+                    f"│  {s1}  │  {s2}  │  {s3}  │\n"
+                    f"└─────┴─────┴─────┘\n\n"
+                    f"{result_msg}\n"
+                    f"{'💰 +' + str(win) if win > 0 else '💸 -' + str(bet)} Jeton\n"
+                    f"💎 Bakiye: {user['balance']} Jeton"
+                )
+                
+                kb = {
+                    'inline_keyboard': [[
+                        {'text': f'🔄 {bet} Tekrar', 'callback_data': f'playslot_{bet}'},
+                        {'text': f'💰 x2', 'callback_data': f'playslot_{bet*2}'}
+                    ]]
+                }
+                
+                send(msg, kb)
+            
+            # ============ ZAR BUTONU ============
+            elif cb.startswith('playdice_'):
+                bet = int(cb.split('_')[1])
+                
+                if user['balance'] < bet:
+                    send('❌ Yetersiz jeton!')
+                    return 'OK'
+                
+                z1 = random.randint(1, 6)
+                z2 = random.randint(1, 6)
+                total = z1 + z2
+                dice_emoji = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
+                
+                win = 0
+                if total == 7:
+                    win = bet * 6
+                    msg = '🎯 MÜKEMMEL!'
+                elif 5 <= total <= 9:
+                    win = bet * 2
+                    msg = '👌 İYİ!'
+                else:
+                    msg = '😔 Kaybettin'
+                
+                user['balance'] += win - bet
+                user['games'] += 1
+                if win > 0:
+                    user['wins'] += win
+                user['level'] = (user['wins'] // 100) + 1
+                save_data()
+                
+                result = (
+                    f"🎲 <b>ZAR</b>\n\n"
+                    f"{dice_emoji[z1]} + {dice_emoji[z2]} = <b>{total}</b>\n\n"
+                    f"{msg}\n"
+                    f"{'💰 +' + str(win) if win > 0 else '💸 -' + str(bet)} Jeton\n"
+                    f"💎 Bakiye: {user['balance']} Jeton"
+                )
+                
+                send(result)
+            
+            # ============ RULET BUTONU ============
+            elif cb.startswith('playroulette_'):
+                bet = int(cb.split('_')[1])
+                
+                if user['balance'] < bet:
+                    send('❌ Yetersiz jeton!')
+                    return 'OK'
+                
+                sayi = random.randint(0, 36)
+                kirmizi = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
+                renk = '🟢' if sayi == 0 else ('🔴' if sayi in kirmizi else '⚫')
+                
+                win = 0
+                if renk == '🔴':
+                    win = bet * 2
+                    msg = '🎉 KIRMIZI KAZANDI!'
+                elif sayi == 0:
+                    win = bet * 14
+                    msg = '💚 YEŞİL JACKPOT!'
+                else:
+                    msg = '💔 Kaybettin'
+                
+                user['balance'] += win - bet
+                user['games'] += 1
+                if win > 0:
+                    user['wins'] += win
+                user['level'] = (user['wins'] // 100) + 1
+                save_data()
+                
+                result = (
+                    f"🎡 <b>RULET</b>\n\n"
+                    f"┌───────────┐\n"
+                    f"│    {renk} {sayi}    │\n"
+                    f"└───────────┘\n\n"
+                    f"{msg}\n"
+                    f"{'💰 +' + str(win) if win > 0 else '💸 -' + str(bet)} Jeton\n"
+                    f"💎 Bakiye: {user['balance']} Jeton"
+                )
+                
+                send(result)
+            
+            # ============ BLACKJACK BUTONU ============
+            elif cb.startswith('playbj_'):
+                bet = int(cb.split('_')[1])
+                
+                if user['balance'] < bet:
+                    send('❌ Yetersiz jeton!')
+                    return 'OK'
+                
+                pCard = random.randint(2, 11)
+                dCard = random.randint(2, 11)
+                
+                win = 0
+                if pCard > dCard:
+                    win = bet * 2
+                    msg = '🎉 KAZANDIN!'
+                elif pCard == dCard:
+                    win = bet
+                    msg = '🤝 BERABERE'
+                else:
+                    msg = '💔 Kaybettin'
+                
+                user['balance'] += win - bet
+                user['games'] += 1
+                if win > 0:
+                    user['wins'] += win
+                user['level'] = (user['wins'] // 100) + 1
+                save_data()
+                
+                result = (
+                    f"🃏 <b>BLACKJACK</b>\n\n"
+                    f"👤 Sen: <b>{pCard}</b>\n"
+                    f"🤖 Krupiye: <b>{dCard}</b>\n\n"
+                    f"{msg}\n"
+                    f"{'💰 +' + str(win) if win > 0 else '💸 -' + str(bet)} Jeton\n"
+                    f"💎 Bakiye: {user['balance']} Jeton"
+                )
+                
+                send(result)
+            
+            # ============ BAKİYE BUTONU ============
+            elif cb == 'balance':
+                msg = (
+                    f"💎 <b>BAKİYE</b>\n\n"
+                    f"👑 {user['name']}\n"
+                    f"💎 Jeton: <b>{user['balance']}</b>\n"
+                    f"⭐ Seviye: <b>{user['level']}</b>\n"
+                    f"🎮 Oyun: {user['games']}\n"
+                    f"🏆 Kazanç: {user['wins']} Jeton\n"
+                    f"💳 DP Harcanan: {user['dp_spent']}\n\n"
+                    f"📊 1 Jeton = {JETON_FIYAT} DP"
+                )
+                send(msg)
+            
+            # ============ BONUS BUTONU ============
+            elif cb == 'daily':
+                today = datetime.now().strftime('%Y-%m-%d')
+                if user['daily'] == today:
+                    send('⏰ Bugün bonus aldın!')
+                else:
+                    bonus = random.randint(1, 5)
+                    user['balance'] += bonus
+                    user['daily'] = today
+                    save_data()
+                    send(f"🎁 <b>GÜNLÜK BONUS!</b>\n\n💰 +{bonus} Jeton\n💎 Bakiye: {user['balance']} Jeton")
+            
+            # ============ LİDERLER BUTONU ============
+            elif cb == 'top':
+                sorted_u = sorted(users.items(), key=lambda x: x[1]['balance'], reverse=True)[:10]
+                msg = "🏆 <b>LİDER TABLOSU</b>\n\n"
+                for i, (_, u) in enumerate(sorted_u, 1):
+                    emoji = ['🥇','🥈','🥉'][i-1] if i <= 3 else f'{i}.'
+                    msg += f"{emoji} {u['name']}: {u['balance']} Jeton ⭐{u['level']}\n"
+                send(msg)
+            
+            # ============ İSTATİSTİK BUTONU ============
+            elif cb == 'stats':
+                msg = (
+                    f"📊 <b>İSTATİSTİKLER</b>\n\n"
+                    f"👑 {user['name']}\n"
+                    f"💎 Jeton: {user['balance']}\n"
+                    f"⭐ Seviye: {user['level']}\n"
+                    f"🎮 Oyun: {user['games']}\n"
+                    f"🏆 Kazanç: {user['wins']} Jeton\n"
+                    f"💳 DP: {user['dp_spent']}"
+                )
+                send(msg)
+            
+            # ============ ANA MENÜ ============
+            elif cb == 'menu':
+                kb = {
+                    'inline_keyboard': [
+                        [{'text': '💎 JETON AL', 'callback_data': 'buy_jeton'}],
+                        [{'text': '🎰 Slot', 'callback_data': 'playslot_1'},
+                         {'text': '🎲 Zar', 'callback_data': 'playdice_1'}],
+                        [{'text': '🎡 Rulet', 'callback_data': 'playroulette_1'},
+                         {'text': '🃏 Blackjack', 'callback_data': 'playbj_1'}],
+                        [{'text': '💰 Bakiye', 'callback_data': 'balance'},
+                         {'text': '🎁 Bonus', 'callback_data': 'daily'}],
+                        [{'text': '🏆 Liderler', 'callback_data': 'top'}]
+                    ]
+                }
+                send(
+                    f"🎰 <b>GAZİNO KADİM</b>\n\n"
+                    f"👑 {user['name']}\n"
+                    f"💎 Bakiye: {user['balance']} Jeton",
+                    kb
+                )
+    
+    except Exception as e:
+        print(f"HATA: {e}")
+    
+    return 'OK'
 
-@app.route('/api/user/<user_id>')
-def api_user(user_id):
-    from bot import get_user
-    return jsonify(get_user(user_id))
+# ============ ADMIN: ONAYLAMA ============
+# Sana özel komut: /onay [kullanici_id] [jeton]
+def check_admin_message():
+    """Polling ile admin mesajlarını kontrol et"""
+    pass
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
